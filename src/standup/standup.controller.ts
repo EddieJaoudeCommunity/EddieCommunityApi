@@ -1,4 +1,5 @@
 import {
+  Headers,
   Body,
   Controller,
   Delete,
@@ -8,9 +9,18 @@ import {
   Post,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
-import { ApiHeader, ApiQuery, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiHeader,
+  ApiQuery,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Author, AuthorObject } from '../auth/author-headers';
+import { TokenPayload } from '../auth/interfaces/token-payload.interface';
+import { JWTGuard, MyAuthGuard } from '../auth/jwt.strategy';
 import { TokenGuard } from '../auth/token.strategy';
 import { StandupDTO } from './dto/standup.dto';
 import { StandupService } from './standup.service';
@@ -23,24 +33,38 @@ export class StandupController {
   @Post()
   @UseGuards(TokenGuard)
   @ApiSecurity('token')
-  createStandup(@Body() body: StandupDTO) {
-    return this.standupService.create(body);
+  @ApiHeader({ name: 'keyspace', required: true })
+  createStandup(
+    @Body() body: StandupDTO,
+    @Headers('keyspace') keyspace: string,
+  ) {
+    return this.standupService.create(body, keyspace);
   }
 
   @Get()
-  findAllStandups() {
-    return this.standupService.findAll();
+  @ApiBearerAuth()
+  @ApiSecurity('token')
+  @UseGuards(new MyAuthGuard())
+  findAllStandups(@Req() req) {
+    const user: TokenPayload = req.user;
+    return this.standupService.findAll(user.keyspace);
   }
 
   @Get('search')
   @ApiQuery({ name: 'uid', type: 'string' })
-  search(@Query('uid') uid: string) {
-    return this.standupService.search(uid);
+  @ApiBearerAuth()
+  @UseGuards(JWTGuard)
+  search(@Query('uid') uid: string, @Req() req) {
+    const user: TokenPayload = req.user;
+    return this.standupService.search(uid, user.keyspace);
   }
 
   @Get(':id')
-  findById(@Param('id') id: string) {
-    return this.standupService.findById(id);
+  @ApiQuery({ name: 'uid', type: 'string' })
+  @ApiBearerAuth()
+  findById(@Param('id') id: string, @Req() req) {
+    const user: TokenPayload = req.user;
+    return this.standupService.findById(id, user.keyspace);
   }
 
   @Delete(':id')
@@ -49,7 +73,12 @@ export class StandupController {
   @HttpCode(204)
   @ApiHeader({ name: 'User-Uid', required: true })
   @ApiHeader({ name: 'Platform', required: true })
-  deleteStandup(@Param('id') id: string, @AuthorObject() author: Author) {
-    return this.standupService.deleteStandup(id, author);
+  @ApiHeader({ name: 'keyspace', required: true })
+  deleteStandup(
+    @Param('id') id: string,
+    @AuthorObject() author: Author,
+    @Headers('keyspace') keyspace: string,
+  ) {
+    return this.standupService.deleteStandup(id, author, keyspace);
   }
 }
